@@ -17,8 +17,6 @@ import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -30,6 +28,7 @@ public class WaveStatsPanel extends JPanel {
 	private String baseURL;
 
 	private String waveURL;
+	private final JButton spawnLos = new JButton("Spawn LoS");
 	private JLabel waveNumber;
 	private JLabel duration;
 	private JLabel damageTaken;
@@ -188,10 +187,15 @@ public class WaveStatsPanel extends JPanel {
 					return;
 				}
 
-				LinkBrowser.browse(waveURL);
+				openWave();
 			}
 		};
 
+		spawnLos.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 13));
+		spawnLos.setToolTipText("Open the recorded wave-start positions in the selected Wave Tool");
+		spawnLos.addActionListener(e -> openWave());
+		spawnLos.setEnabled(waveURL != null);
+		add(spawnLos, BorderLayout.SOUTH);
 		addMouseListener(waveStatsMouseListener);
 	}
 
@@ -204,34 +208,24 @@ public class WaveStatsPanel extends JPanel {
 		imageLabel.repaint();
 	}
 
+	private void openWave() {
+		String url = generateURL();
+		if (url != null) LinkBrowser.browse(url);
+	}
+
 	public String generateURL() {
-		StringBuilder sb = new StringBuilder();
-		sb.append(this.baseURL);
 		if (config.url() == InfernoStatsConfig.URL.INFERNO_TIPS) {
-			sb.append("wave=").append(wave.getId()).append("&location=").append(wave.getLocation()).append("&");
+			return wave.getLosSnapshot() == null ? null : wave.getLosSnapshot().toUrl(config.url().base);
 		}
-
+		StringBuilder sb = new StringBuilder(config.url().base);
 		for (InfernoNpc type : InfernoNpc.values()) {
-			List<WaveSpawn> spawns = getWaveSpawns().stream()
+			List<List<Integer>> tiles = getWaveSpawns().stream()
 				.filter(s -> s.getColor().equals(type.color))
-				.collect(java.util.stream.Collectors.toList());
-
-			if (spawns.isEmpty())
-				continue;
-
-			List<List<Integer>> tiles = spawns.stream()
 				.map(s -> java.util.Arrays.asList(s.getX(), s.getY()))
 				.collect(java.util.stream.Collectors.toList());
-
-			String positions = tiles.toString().replaceAll("\\s", "");
-			if (config.url() == InfernoStatsConfig.URL.INFERNO_TIPS) {
-				positions = URLEncoder.encode(positions, StandardCharsets.UTF_8);
-			}
-			sb.append(type.urlParam).append("=").append(positions).append("&");
+			if (!tiles.isEmpty()) sb.append(type.urlParam).append("=").append(tiles).append("&");
 		}
-
-		sb.append("copyable");
-		return sb.toString().replaceAll("\\s", "");
+		return sb.append("copyable").toString().replaceAll("\\s", "");
 	}
 
 	private List<WaveSpawn> getWaveSpawns() {
@@ -266,6 +260,10 @@ public class WaveStatsPanel extends JPanel {
 		}
 
 		this.waveURL = this.generateURL();
+		this.spawnLos.setEnabled(waveURL != null);
+		this.spawnLos.setToolTipText(waveURL == null
+			? "No Inferno wave-start capture is available for this wave"
+			: "Open the recorded wave-start positions in the selected Wave Tool");
 		this.duration.setText("Time: " + TimeFormatting.getCurrentWaveTime(wave));
 		this.damageTaken.setText("Damage Taken: " + this.wave.getDamageTaken());
 		this.damageDealt.setText("Damage Dealt: " + this.wave.getDamageDealt());

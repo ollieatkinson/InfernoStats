@@ -6,6 +6,7 @@ import com.infernostats.controller.TickLossHandler;
 import com.infernostats.controller.TimerHandler;
 import com.infernostats.controller.WaveHandler;
 import com.infernostats.events.*;
+import com.infernostats.los.LosCapture;
 import com.infernostats.model.Wave;
 import com.infernostats.model.WaveSplit;
 import com.infernostats.model.WaveState;
@@ -17,6 +18,7 @@ import net.runelite.api.WorldView;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.client.config.ConfigManager;
+import net.runelite.client.callback.ClientThread;
 import net.runelite.client.eventbus.EventBus;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.events.ConfigChanged;
@@ -28,6 +30,8 @@ import net.runelite.client.ui.NavigationButton;
 import net.runelite.client.ui.overlay.OverlayManager;
 import net.runelite.client.ui.overlay.infobox.InfoBoxManager;
 import net.runelite.client.util.ImageUtil;
+import net.runelite.client.util.LinkBrowser;
+import javax.swing.SwingUtilities;
 
 import javax.inject.Inject;
 import java.util.ArrayList;
@@ -67,6 +71,14 @@ public class InfernoStatsPlugin extends Plugin {
   private Client client;
 
   @Inject
+  private ClientThread clientThread;
+
+  @Inject
+  private LosCapture losCapture;
+
+  private volatile boolean running;
+
+  @Inject
   private EventBus eventBus;
 
   @Inject
@@ -94,6 +106,7 @@ public class InfernoStatsPlugin extends Plugin {
 
   @Override
   protected void startUp() {
+    running = true;
     panel = injector.getInstance(InfernoStatsPanel.class);
     navButton = NavigationButton.builder()
         .tooltip("Inferno Stats")
@@ -110,6 +123,7 @@ public class InfernoStatsPlugin extends Plugin {
 
     WaveSplit.UpdateTargetSplits(this.config);
 
+    eventBus.register(losCapture);
     eventBus.register(waveHandler);
     eventBus.register(timerHandler);
     eventBus.register(chatHandler);
@@ -122,6 +136,9 @@ public class InfernoStatsPlugin extends Plugin {
 
   @Override
   protected void shutDown() {
+    running = false;
+    eventBus.unregister(losCapture);
+    clientThread.invokeLater(losCapture::clear);
     overlayManager.remove(overlay);
     clientToolbar.removeNavigation(navButton);
 
@@ -141,6 +158,11 @@ public class InfernoStatsPlugin extends Plugin {
       return;
 
     switch (event.getKey()) {
+      case "url":
+        clientThread.invokeLater(() -> {
+          if (running) panel.refreshLinks(losCapture.canCapture());
+        });
+        break;
       case "hide":
         resetNav();
         break;
@@ -161,6 +183,7 @@ public class InfernoStatsPlugin extends Plugin {
 
   @Subscribe
   public void onGameStateChanged(GameStateChanged gameStateChanged) {
+    if (panel != null) panel.updateCurrentLos(losCapture.canCapture());
     switch (gameStateChanged.getGameState()) {
       case LOADING:
         if (timerHandler.getState() == TimerHandler.TimerState.RUNNING)
@@ -180,8 +203,18 @@ public class InfernoStatsPlugin extends Plugin {
 
   @Subscribe
   protected void onGameTick(GameTick e) {
+    this.panel.updateCurrentLos(losCapture.canCapture());
     if (isInInferno() || isInFightCaves())
       this.panel.UpdateWave();
+  }
+
+  void openCurrentLos() {
+    clientThread.invokeLater(() -> {
+      if (!running || config.url() != InfernoStatsConfig.URL.INFERNO_TIPS) return;
+      String url = losCapture.currentUrl();
+      panel.updateCurrentLos(url != null);
+      if (url != null) SwingUtilities.invokeLater(() -> LinkBrowser.browse(url));
+    });
   }
 
   @Subscribe

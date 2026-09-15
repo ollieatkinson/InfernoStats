@@ -19,22 +19,54 @@ public class InfernoStatsPanel extends PluginPanel {
 	private final WaveSplitsPanel waveSplitsPanel = new WaveSplitsPanel();
 	private final WaveListPanel waveListPanel = new WaveListPanel();
 	private final WaveListContainer waveListContainer = new WaveListContainer(waveListPanel);
+	private final JButton currentLos = new JButton("Current LoS");
 
 	private final InfernoStatsPlugin plugin;
 	private final InfernoStatsConfig config;
 
 	@Inject
 	private InfernoStatsPanel(InfernoStatsPlugin plugin, InfernoStatsConfig config) {
+		super(false);
 		this.plugin = plugin;
 		this.config = config;
 
 		setBackground(ColorScheme.DARK_GRAY_COLOR);
-
-		add(this.titlePanel, BorderLayout.NORTH, 0);
-		add(this.waveSplitsPanel, BorderLayout.CENTER, 1);
-		add(this.waveListContainer, BorderLayout.SOUTH, 2);
+		setLayout(new BorderLayout(0, 6));
+		JPanel header = new JPanel(new BorderLayout(0, 6));
+		header.setOpaque(false);
+		header.add(titlePanel, BorderLayout.NORTH);
+		currentLos.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 13));
+		currentLos.setPreferredSize(new Dimension(0, 38));
+		currentLos.setEnabled(false);
+		currentLos.setVisible(config.url() == InfernoStatsConfig.URL.INFERNO_TIPS);
+		currentLos.setToolTipText("Enter the Inferno to capture current positions");
+		currentLos.addActionListener(e -> plugin.openCurrentLos());
+		header.add(currentLos, BorderLayout.CENTER);
+		header.add(waveSplitsPanel, BorderLayout.SOUTH);
+		add(header, BorderLayout.NORTH);
+		add(waveListContainer, BorderLayout.CENTER);
 
 		waveSplitsPanel.setWaves(this.plugin.getWaves());
+	}
+
+	void refreshLinks(boolean canCapture) {
+		SwingUtilities.invokeLater(() -> {
+			currentLos.setVisible(config.url() == InfernoStatsConfig.URL.INFERNO_TIPS);
+			currentLos.setEnabled(canCapture);
+			currentLos.setToolTipText(canCapture ? "Open your current player, monster and pillar positions"
+				: "Enter the Inferno to capture current positions");
+			for (Component child : waveListPanel.getComponents()) ((WaveStatsPanel) child).update();
+			revalidate();
+			repaint();
+		});
+	}
+
+	void updateCurrentLos(boolean canCapture) {
+		SwingUtilities.invokeLater(() -> {
+			currentLos.setEnabled(canCapture);
+			currentLos.setToolTipText(canCapture ? "Open your current player, monster and pillar positions"
+				: "Enter the Inferno to capture current positions");
+		});
 	}
 
 	void AddWave(Wave wave) {
@@ -55,8 +87,11 @@ public class InfernoStatsPanel extends PluginPanel {
 	}
 
 	public void ClearWaves() {
-		waveListPanel.removeAll();
-		waveListPanel.validate();
-		waveListPanel.repaint();
+		SwingUtilities.invokeLater(() -> {
+			waveStatsPanel = null;
+			waveListPanel.removeAll();
+			waveListPanel.revalidate();
+			waveListPanel.repaint();
+		});
 	}
 }

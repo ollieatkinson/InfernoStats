@@ -1,5 +1,7 @@
 package com.infernostats.model;
 
+import com.infernostats.los.Snapshot;
+
 import com.google.common.collect.ImmutableSet;
 import lombok.Getter;
 import lombok.Setter;
@@ -15,6 +17,9 @@ import java.util.Set;
 @Setter
 public class Wave {
   private final int id;
+
+  // Published from the client thread; absent when no wave-start capture was observed.
+  private transient volatile Snapshot losSnapshot;
   private ArrayList<WaveNpc> waveNpcs;
   private final long start;
   private long duration;

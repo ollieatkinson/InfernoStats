@@ -362,7 +362,7 @@ public interface InfernoStatsConfig extends Config {
 	enum URL {
 		LINE_OF_SIGHT("https://infernostats.github.io/inferno.html?"),
 		TRAINER("https://www.infernotrainer.com/?"),
-		INFERNO_TIPS("https://los.inferno.tips/?source=inferno-stats&");
+		INFERNO_TIPS("https://los.inferno.tips/");
 
 		public final String base;
 	}
@@ -371,7 +371,7 @@ public interface InfernoStatsConfig extends Config {
 			position = 5,
 			keyName = "url",
 			name = "Wave Tool",
-			description = "Tool to use when opening wave spawns"
+			description = "Destination for wave spawns. Inferno Tips also supports Current LoS capture."
 	)
 	default URL url() {
 		return URL.LINE_OF_SIGHT;
