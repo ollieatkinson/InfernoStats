@@ -17,6 +17,8 @@ import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -205,6 +207,9 @@ public class WaveStatsPanel extends JPanel {
 	public String generateURL() {
 		StringBuilder sb = new StringBuilder();
 		sb.append(this.baseURL);
+		if (config.url() == InfernoStatsConfig.URL.INFERNO_TIPS) {
+			sb.append("wave=").append(wave.getId()).append("&location=").append(wave.getLocation()).append("&");
+		}
 
 		for (InfernoNpc type : InfernoNpc.values()) {
 			List<WaveSpawn> spawns = getWaveSpawns().stream()
@@ -218,7 +223,11 @@ public class WaveStatsPanel extends JPanel {
 				.map(s -> java.util.Arrays.asList(s.getX(), s.getY()))
 				.collect(java.util.stream.Collectors.toList());
 
-			sb.append(type.urlParam).append("=").append(tiles).append("&");
+			String positions = tiles.toString().replaceAll("\\s", "");
+			if (config.url() == InfernoStatsConfig.URL.INFERNO_TIPS) {
+				positions = URLEncoder.encode(positions, StandardCharsets.UTF_8);
+			}
+			sb.append(type.urlParam).append("=").append(positions).append("&");
 		}
 
 		sb.append("copyable");

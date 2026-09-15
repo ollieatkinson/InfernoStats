@@ -361,7 +361,8 @@ public interface InfernoStatsConfig extends Config {
 	@AllArgsConstructor
 	enum URL {
 		LINE_OF_SIGHT("https://infernostats.github.io/inferno.html?"),
-		TRAINER("https://www.infernotrainer.com/?");
+		TRAINER("https://www.infernotrainer.com/?"),
+		INFERNO_TIPS("https://los.inferno.tips/?source=inferno-stats&");
 
 		public final String base;
 	}
