@@ -362,7 +362,7 @@ public interface InfernoStatsConfig extends Config {
 	enum URL {
 		LINE_OF_SIGHT("https://infernostats.github.io/inferno.html?"),
 		TRAINER("https://www.infernotrainer.com/?"),
-		INFERNO_TIPS("https://los.inferno.tips/");
+		INFERNO_TIPS("https://los.inferno.tips/?");
 
 		public final String base;
 	}

@@ -9,8 +9,14 @@ public class WaveNpc {
 	private final InfernoNpc type;
 	// The region spawn point of the NPC
 	private final Point spawn;
+	private final Integer index;
 
 	public WaveNpc(InfernoNpc type, WorldPoint spawn) {
+		this(type, spawn, null);
+	}
+
+	public WaveNpc(InfernoNpc type, WorldPoint spawn, Integer index) {
+		this.index = index;
 		this.type = type;
 		this.spawn = new Point(spawn.getRegionX(), spawn.getRegionY());
 	}

@@ -1,84 +1,24 @@
 package com.infernostats.los;
 
-import java.net.URI;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Arrays;
-import java.util.Collections;
+import com.infernostats.InfernoStatsConfig;
+import com.infernostats.InfernoStatsPlugin;
+import com.infernostats.controller.WaveHandler;
+import com.infernostats.events.WaveStartedEvent;
+import com.infernostats.model.*;
+import java.nio.file.*;
+import java.util.*;
 import net.runelite.api.*;
 import net.runelite.api.coords.WorldPoint;
-import org.junit.Test;
-import com.infernostats.events.WaveStartedEvent;
-import com.infernostats.model.Wave;
-import com.infernostats.model.Location;
-import net.runelite.api.events.GameTick;
 import net.runelite.api.events.NpcSpawned;
+import net.runelite.client.eventbus.EventBus;
+import org.junit.Test;
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
-public class IntegrationTest
-{
-    private final int[] player={16,5};
-    private final boolean[] pillars={true,false,true};
-    private Snapshot.Mob ranger(int id,int x){return new Snapshot.Mob(id,NpcKind.RANGER,x,5);}
-    @Test public void eventOrderAndSpawnCoordinatesSurviveMovement()
-    {
-        for(boolean spawnFirst:new boolean[]{true,false})
-        {
-            WaveRecorder r=new WaveRecorder();
-            if(spawnFirst)r.spawned(100,ranger(40,22));
-            r.waveStarted(31,100,player,pillars);
-            if(!spawnFirst)r.spawned(100,ranger(40,22));
-            assertNull(r.endTick(100));r.spawned(101,ranger(40,21));
-            Snapshot s=r.endTick(101);assertEquals(22,s.mobs.get(0).x);assertEquals(Integer.valueOf(31),s.wave);
-            r.spawned(105,ranger(45,1));r.endTick(105);assertEquals(1,r.history().get(0).mobs.size());
-        }
-    }
-    @Test public void historySurvivesLeavingAndResetsOnNewRun()
-    {
-        WaveRecorder r=new WaveRecorder();r.waveStarted(30,1,player,pillars);r.spawned(1,ranger(1,1));r.endTick(2);
-        r.leave();assertEquals(1,r.history().size());assertNull(r.wave());
-        r.waveStarted(1,10,player,pillars);assertTrue(r.history().isEmpty());
-        r.spawned(10,new Snapshot.Mob(2,NpcKind.NIBBLER,5,5));r.endTick(11);
-        r.waveStarted(1,11,player,pillars);assertEquals(1,r.history().size());
-    }
-    @Test public void lateResurrectionsAreNotWaveStarts()
-    {
-        WaveRecorder r=new WaveRecorder();r.waveStarted(63,100,player,pillars);r.endTick(101);r.endTick(102);
-        r.spawned(103,ranger(2,22));assertNull(r.endTick(103));assertTrue(r.history().isEmpty());
-    }
-    @Test public void snapshotsAreImmutableAndFinalWaveIsExplicit()
-    {
-        Snapshot s=new Snapshot("current",63,player,pillars,Collections.singletonList(ranger(1,22)),Collections.emptyList());
-        player[0]=0;pillars[0]=false;s.player()[0]=1;
-        assertArrayEquals(new int[]{16,5},s.player());assertTrue(s.pillars()[0]);
-        WaveRecorder r=new WaveRecorder();r.waveStarted(69,1,player,pillars);assertTrue(r.warnings().get(0).contains("Zuk"));
-    }
-    @Test public void javaProducesTheBrowserFixture() throws Exception
-    {
-        Snapshot s=new Snapshot("wave",63,player,pillars,Arrays.asList(new Snapshot.Mob(41,NpcKind.MAGER,20,8),new Snapshot.Mob(6,NpcKind.RANGER,22,12)),Collections.emptyList());
-        String url=s.toUrl("https://example.org/inferno/?old#old");
-        assertEquals("/inferno/",URI.create(url).getPath());assertNull(URI.create(url).getQuery());
-        assertEquals("IL2-FKEBBT8CBgPyAikE_AEAANDSVrY",URI.create(url).getRawFragment());
-        assertEquals(6,s.mobs.get(0).id);
-        Path fixture=Path.of("build","fixtures","wave-url.txt");Files.createDirectories(fixture.getParent());
-        Files.writeString(fixture,s.toUrl("https://los.inferno.tips/"));
-    }
-    @Test public void invalidUrlsAreRejected()
-    {
-        Snapshot s=new Snapshot("current",null,player,pillars,Collections.emptyList(),Collections.emptyList());
-        for(String base:Arrays.asList("javascript:alert(1)","file:///tmp/test","data:text/html,test","https://user:pass@example.org","not a url"))
-        {try{s.toUrl(base);fail(base);}catch(IllegalArgumentException expected){}}
-    }
-    @Test public void npcMappingsAndRegionBoundsMatchTheWebsite()
-    {
-        assertArrayEquals(new int[]{16,5},SceneCapture.grid(WorldPoint.fromRegion(9043,33,41,0)));
-        assertNull(SceneCapture.grid(WorldPoint.fromRegion(9042,33,41,0)));
-        assertEquals(NpcKind.MAGE_BLOB,NpcKind.fromId(7694));assertEquals(NpcKind.MELEE_BLOB,NpcKind.fromId(7696));assertEquals(NpcKind.RANGER,NpcKind.fromId(7702));
-        assertFalse(SceneCapture.fits(new int[]{27,5},4));
-    }
-    @Test public void currentCaptureReadsPlayerAndLiveNpcsAtClickTime()
-    {
+public class IntegrationTest {
+    private static class Fixture {
+        Client c; WorldView v; Scene scene; Player p; NPC n; SceneCapture capture;
+        Fixture() {
         Client c=mock(Client.class);WorldView v=mock(WorldView.class);Scene scene=mock(Scene.class);
         when(c.getTopLevelWorldView()).thenReturn(v);when(c.getWorldView(-1)).thenReturn(v);when(v.getId()).thenReturn(-1);
         when(v.getBaseX()).thenReturn(1000);when(v.getBaseY()).thenReturn(2000);when(v.getSizeX()).thenReturn(104);when(v.getSizeY()).thenReturn(104);
@@ -87,89 +27,59 @@ public class IntegrationTest
         for(int x=0;x<13;x++)for(int y=0;y<13;y++)chunks[0][x][y]=((2240/8+x)<<14)|((5312/8+y)<<3);
         when(v.getInstanceTemplateChunks()).thenReturn(chunks);
         Player p=mock(Player.class);when(c.getLocalPlayer()).thenReturn(p);when(p.getWorldView()).thenReturn(v);when(p.getWorldLocation()).thenReturn(new WorldPoint(1033,2041,0));
-        NPC n=mock(NPC.class);when(n.getId()).thenReturn(7699);when(n.getIndex()).thenReturn(42);when(n.getWorldView()).thenReturn(v);when(n.getWorldLocation()).thenReturn(new WorldPoint(1037,2038,0));
-        NPC dead=mock(NPC.class);when(dead.getId()).thenReturn(7698);when(dead.isDead()).thenReturn(true);
-        IndexedObjectSet<NPC> npcs=mock(IndexedObjectSet.class);doReturn(npcs).when(v).npcs();
-        when(npcs.iterator()).thenAnswer(ignored->Arrays.asList(n,dead).iterator());
-        SceneCapture capture=new SceneCapture(c);Snapshot first=capture.current(63,Collections.emptyList());
-        assertEquals("current",first.kind);assertArrayEquals(new int[]{16,5},first.player());assertEquals(1,first.mobs.size());assertEquals(20,first.mobs.get(0).x);
-        when(n.getWorldLocation()).thenReturn(new WorldPoint(1038,2038,0));
-        Snapshot second=capture.current(63,Collections.emptyList());assertEquals(21,second.mobs.get(0).x);assertEquals(20,first.mobs.get(0).x);
-    }
-    @Test public void pillarObjectsAreReadAtTheirFootprintRatherThanTheirCentre()
-    {
-        Client c=mock(Client.class);WorldView v=mock(WorldView.class);Scene scene=mock(Scene.class);
-        when(c.getTopLevelWorldView()).thenReturn(v);when(c.getWorldView(-1)).thenReturn(v);when(v.getId()).thenReturn(-1);
-        when(v.isInstance()).thenReturn(true);when(v.getScene()).thenReturn(scene);
-        int[][][] chunks=new int[4][13][13];
-        for(int x=0;x<13;x++)for(int y=0;y<13;y++)chunks[0][x][y]=((2240/8+x)<<14)|((5312/8+y)<<3);
-        when(v.getInstanceTemplateChunks()).thenReturn(chunks);
-        Tile tile=mock(Tile.class);GameObject north=mock(GameObject.class);
-        when(north.getId()).thenReturn(30354);when(north.getSceneMinLocation()).thenReturn(new Point(34,39));
-        when(tile.getGameObjects()).thenReturn(new GameObject[]{north});
-        Tile[][][] tiles=new Tile[4][1][1];tiles[0][0][0]=tile;when(scene.getTiles()).thenReturn(tiles);
-        SceneCapture capture=new SceneCapture(c);assertArrayEquals(new boolean[]{false,true,false},capture.pillars());
-        when(tile.getGameObjects()).thenReturn(new GameObject[0]);assertArrayEquals(new boolean[]{false,false,false},capture.pillars());
-    }
-    @Test public void instanceFootprintsAndRotatedChunksUseSouthwestAnchor()
-    {
-        Client c=mock(Client.class);WorldView v=mock(WorldView.class);
-        when(c.getTopLevelWorldView()).thenReturn(v);when(c.getWorldView(-1)).thenReturn(v);
-        when(v.getId()).thenReturn(-1);when(v.getBaseX()).thenReturn(1000);when(v.getBaseY()).thenReturn(2000);
-        when(v.isInstance()).thenReturn(true);when(v.getSizeX()).thenReturn(104);when(v.getSizeY()).thenReturn(104);
-        int[][][] chunks=new int[4][13][13];
-        for(int x=0;x<13;x++)for(int y=0;y<13;y++)chunks[0][x][y]=((2240/8+x)<<14)|((5312/8+y)<<3);
-        when(v.getInstanceTemplateChunks()).thenReturn(chunks);
-        NPC n=mock(NPC.class);when(n.getId()).thenReturn(7699);when(n.getIndex()).thenReturn(42);when(n.getWorldView()).thenReturn(v);when(n.getWorldLocation()).thenReturn(new WorldPoint(1037,2038,0));
-        SceneCapture capture=new SceneCapture(c);Snapshot.Mob m=capture.mob(n);
-        assertNotNull(m);assertEquals(20,m.x);assertEquals(8,m.y);assertEquals(42,m.id);
-        chunks[0][4][5]|=1<<1;when(n.getId()).thenReturn(7698);when(n.getWorldLocation()).thenReturn(new WorldPoint(1033,2041,0));
-        m=capture.mob(n);assertNotNull(m);assertEquals(19,m.x);assertEquals(5,m.y);
-        when(n.isDead()).thenReturn(true);assertNull(capture.mob(n));
-    }
-    @Test public void eventWiringPublishesFrozenSpawnsAndSeparateLiveLinks() throws Exception
-    {
-        Client c=mock(Client.class);WorldView v=mock(WorldView.class);Scene scene=mock(Scene.class);
-        when(c.getTopLevelWorldView()).thenReturn(v);when(c.getWorldView(-1)).thenReturn(v);when(v.getId()).thenReturn(-1);
-        when(v.getBaseX()).thenReturn(1000);when(v.getBaseY()).thenReturn(2000);when(v.getSizeX()).thenReturn(104);when(v.getSizeY()).thenReturn(104);
-        when(v.isInstance()).thenReturn(true);when(v.getScene()).thenReturn(scene);when(scene.getTiles()).thenReturn(new Tile[4][1][1]);
-        int[][][] chunks=new int[4][13][13];
-        for(int x=0;x<13;x++)for(int y=0;y<13;y++)chunks[0][x][y]=((2240/8+x)<<14)|((5312/8+y)<<3);
-        when(v.getInstanceTemplateChunks()).thenReturn(chunks);
-        Player p=mock(Player.class);when(c.getLocalPlayer()).thenReturn(p);when(p.getWorldView()).thenReturn(v);when(p.getWorldLocation()).thenReturn(new WorldPoint(1033,2041,0));
-        NPC n=mock(NPC.class);when(n.getId()).thenReturn(7699);when(n.getIndex()).thenReturn(42);when(n.getWorldView()).thenReturn(v);when(n.getWorldLocation()).thenReturn(new WorldPoint(1037,2038,0));
-        NPC dead=mock(NPC.class);when(dead.getId()).thenReturn(7698);when(dead.isDead()).thenReturn(true);
+        NPC n=mock(NPC.class);when(n.getId()).thenReturn(7699);when(n.getName()).thenReturn("Jal-Zek");when(n.getIndex()).thenReturn(42);when(n.getWorldView()).thenReturn(v);when(n.getWorldLocation()).thenReturn(new WorldPoint(1037,2038,0));
+        NPC dead=mock(NPC.class);when(dead.getId()).thenReturn(7698);when(dead.getName()).thenReturn("Jal-Xil");when(dead.isDead()).thenReturn(true);
         IndexedObjectSet<NPC> npcs=mock(IndexedObjectSet.class);doReturn(npcs).when(v).npcs();
         when(npcs.iterator()).thenAnswer(ignored->Arrays.asList(n,dead).iterator());
 
-        when(c.getGameState()).thenReturn(GameState.LOGGED_IN);
-        when(c.getTickCount()).thenReturn(100);
-        LosCapture capture=new LosCapture(c,new SceneCapture(c));
+            when(c.getGameState()).thenReturn(GameState.LOGGED_IN);
+            this.c=c;this.v=v;this.scene=scene;this.p=p;this.n=n;this.capture=new SceneCapture(c);
+        }
+    }
+    @Test public void currentPositionsUseInstanceCoordinatesAndSkipDeadNpcs() throws Exception {
+        Fixture f=new Fixture();
+        assertTrue(f.capture.canCapture());
+        assertEquals(new Point(16,5),f.capture.player());
+        List<WaveNpc> before=f.capture.currentNpcs();assertEquals(1,before.size());
+        assertEquals(Integer.valueOf(42),before.get(0).getIndex());
+        assertEquals(new Point(37,38),before.get(0).getSpawn());
+        when(f.n.getWorldLocation()).thenReturn(new WorldPoint(1038,2038,0));
+        List<WaveNpc> after=f.capture.currentNpcs();
+        assertEquals(new Point(38,38),after.get(0).getSpawn());
+        assertEquals(new Point(37,38),before.get(0).getSpawn());
+        String url=LosLinks.current(InfernoStatsConfig.URL.INFERNO_TIPS,after,f.capture.player(),f.capture.pillars());
+        assertTrue(url.contains("kind=current"));assertFalse(url.contains("wave="));assertFalse(url.contains("IL2"));
+        Path file=Path.of("build","fixtures","inferno-tips-current-url.txt");Files.createDirectories(file.getParent());Files.writeString(file,url);
+        when(f.c.getLocalPlayer()).thenReturn(null);assertFalse(f.capture.canCapture());assertNull(f.capture.player());
+    }
+    @Test public void pillarFootprintsAndRotatedNpcChunksAreNormalized() {
+        Fixture f=new Fixture();
+        Tile tile=mock(Tile.class);GameObject north=mock(GameObject.class);
+        when(north.getId()).thenReturn(30354);when(north.getSceneMinLocation()).thenReturn(new Point(34,39));
+        when(tile.getGameObjects()).thenReturn(new GameObject[]{north});
+        Tile[][][] tiles=new Tile[4][1][1];tiles[0][0][0]=tile;when(f.scene.getTiles()).thenReturn(tiles);
+        assertEquals(2,f.capture.pillars());
+        when(tile.getGameObjects()).thenReturn(new GameObject[0]);assertEquals(0,f.capture.pillars());
+        f.v.getInstanceTemplateChunks()[0][4][5]|=1<<1;
+        when(f.n.getName()).thenReturn("Jal-Xil");when(f.n.getWorldLocation()).thenReturn(new WorldPoint(1033,2041,0));
+        assertArrayEquals(new int[]{19,5},SceneCapture.grid(f.capture.spawn(f.n)));
+        when(f.n.getName()).thenReturn("Jal-Nib");assertNull(f.capture.spawn(f.n));
+    }
+    @Test public void existingWaveHandlerOwnsSpawnsAndCapturesStartContext() throws Exception {
+        Fixture f=new Fixture();InfernoStatsPlugin plugin=mock(InfernoStatsPlugin.class);when(plugin.isInInferno()).thenReturn(true);
+        var ctor=WaveHandler.class.getDeclaredConstructor(InfernoStatsPlugin.class,InfernoStatsConfig.class);ctor.setAccessible(true);
+        WaveHandler handler=ctor.newInstance(plugin,new InfernoTipsLinkTest.TestConfig());
+        var field=WaveHandler.class.getDeclaredField("sceneCapture");field.setAccessible(true);field.set(handler,f.capture);
+        EventBus bus=new EventBus();bus.register(handler);
         Wave wave=new Wave(63,0);wave.setLocation(Location.INFERNO);
-        // NPCs may arrive before the wave chat message.
-        capture.onNpcSpawned(new NpcSpawned(n));
-        capture.onWaveStartedEvent(new WaveStartedEvent(wave));
-        capture.onGameTick(new GameTick());assertNull(wave.getLosSnapshot());
-        when(n.getWorldLocation()).thenReturn(new WorldPoint(1038,2038,0));
-        when(c.getTickCount()).thenReturn(101);
-        capture.onGameTick(new GameTick());
-        Snapshot spawn=wave.getLosSnapshot();assertNotNull(spawn);
-        assertEquals("wave",spawn.kind);assertEquals(20,spawn.mobs.get(0).x);
-        String spawnUrl=spawn.toUrl("https://los.inferno.tips/");
-        String current=capture.currentUrl();assertTrue(current.startsWith("https://los.inferno.tips/#IL2-"));
-        assertNotEquals(spawnUrl,current);
-        Path fixture=Path.of("build","fixtures","inferno-tips-current-url.txt");
-        Files.createDirectories(fixture.getParent());Files.writeString(fixture,current);
-        when(c.getTickCount()).thenReturn(105);
-        capture.onNpcSpawned(new NpcSpawned(n));capture.onGameTick(new GameTick());
-        assertSame(spawn,wave.getLosSnapshot());
-        when(c.getLocalPlayer()).thenReturn(null);capture.onGameTick(new GameTick());
-        assertFalse(capture.canCapture());assertNull(capture.currentUrl());
-        assertEquals(spawnUrl,wave.getLosSnapshot().toUrl("https://los.inferno.tips/"));
-        when(c.getLocalPlayer()).thenReturn(p);
-        // Entering mid-wave must not invent a wave-start capture or retain an old wave number.
-        capture.onGameTick(new GameTick());
-        assertEquals(new SceneCapture(c).current(null,Collections.emptyList()).toUrl("https://los.inferno.tips/"),capture.currentUrl());
-        capture.clear();
+        bus.post(new WaveStartedEvent(wave));bus.post(new NpcSpawned(f.n));
+        assertEquals(1,wave.getWaveNpcs().size());assertEquals(new Point(16,5),wave.getLosPlayer());assertEquals(Integer.valueOf(0),wave.getLosPillars());
+        String before=LosLinks.wave(InfernoStatsConfig.URL.INFERNO_TIPS,wave);
+        when(f.n.getWorldLocation()).thenReturn(new WorldPoint(1038,2038,0));
+        wave.setDuration(3);bus.post(new NpcSpawned(f.n));
+        assertEquals(before,LosLinks.wave(InfernoStatsConfig.URL.INFERNO_TIPS,wave));
+        when(f.c.getLocalPlayer()).thenReturn(null);
+        assertEquals(before,LosLinks.wave(InfernoStatsConfig.URL.INFERNO_TIPS,wave));
+        bus.unregister(handler);
     }
 }

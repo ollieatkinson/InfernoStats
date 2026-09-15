@@ -1,26 +1,25 @@
 package com.infernostats.model;
 
-import com.infernostats.los.Snapshot;
-
 import com.google.common.collect.ImmutableSet;
 import lombok.Getter;
 import lombok.Setter;
 import net.runelite.api.Constants;
 import net.runelite.api.NPC;
+import net.runelite.api.Point;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import net.runelite.api.coords.WorldPoint;
 
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.Set;
 
 @Getter
 @Setter
 public class Wave {
   private final int id;
-
-  // Published from the client thread; absent when no wave-start capture was observed.
-  private transient volatile Snapshot losSnapshot;
-  private ArrayList<WaveNpc> waveNpcs;
+  private List<WaveNpc> waveNpcs;
+  private volatile Point losPlayer;
+  private volatile Integer losPillars;
   private final long start;
   private long duration;
   private int damageTaken;
@@ -48,13 +47,13 @@ public class Wave {
     this.prayerDrain = 0;
     this.idleTicks = 0;
     this.state = WaveState.STARTED;
-    this.waveNpcs = new ArrayList<>();
+    this.waveNpcs = new CopyOnWriteArrayList<>();
     this.pace = null;
   }
 
   public void addNpc(NPC npc, WorldPoint spawn) {
     InfernoNpc.fromName(npc.getName()).ifPresent(type -> {
-      waveNpcs.add(new WaveNpc(type, spawn));
+      waveNpcs.add(new WaveNpc(type, spawn, npc.getIndex()));
     });
   }
 

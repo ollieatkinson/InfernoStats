@@ -26,25 +26,17 @@ public class InfernoStatsPanel extends PluginPanel {
 
 	@Inject
 	private InfernoStatsPanel(InfernoStatsPlugin plugin, InfernoStatsConfig config) {
-		super(false);
 		this.plugin = plugin;
 		this.config = config;
-
 		setBackground(ColorScheme.DARK_GRAY_COLOR);
-		setLayout(new BorderLayout(0, 6));
-		JPanel header = new JPanel(new BorderLayout(0, 6));
-		header.setOpaque(false);
-		header.add(titlePanel, BorderLayout.NORTH);
-		currentLos.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 13));
-		currentLos.setPreferredSize(new Dimension(0, 38));
 		currentLos.setEnabled(false);
 		currentLos.setVisible(config.url() == InfernoStatsConfig.URL.INFERNO_TIPS);
 		currentLos.setToolTipText("Enter the Inferno to capture current positions");
 		currentLos.addActionListener(e -> plugin.openCurrentLos());
-		header.add(currentLos, BorderLayout.CENTER);
-		header.add(waveSplitsPanel, BorderLayout.SOUTH);
-		add(header, BorderLayout.NORTH);
-		add(waveListContainer, BorderLayout.CENTER);
+		add(currentLos, 0);
+		add(titlePanel, BorderLayout.NORTH, 1);
+		add(waveSplitsPanel, BorderLayout.CENTER, 2);
+		add(waveListContainer, BorderLayout.SOUTH, 3);
 
 		waveSplitsPanel.setWaves(this.plugin.getWaves());
 	}

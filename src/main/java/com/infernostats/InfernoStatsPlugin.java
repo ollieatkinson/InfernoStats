@@ -6,7 +6,8 @@ import com.infernostats.controller.TickLossHandler;
 import com.infernostats.controller.TimerHandler;
 import com.infernostats.controller.WaveHandler;
 import com.infernostats.events.*;
-import com.infernostats.los.LosCapture;
+import com.infernostats.los.SceneCapture;
+import com.infernostats.los.LosLinks;
 import com.infernostats.model.Wave;
 import com.infernostats.model.WaveSplit;
 import com.infernostats.model.WaveState;
@@ -74,7 +75,7 @@ public class InfernoStatsPlugin extends Plugin {
   private ClientThread clientThread;
 
   @Inject
-  private LosCapture losCapture;
+  private SceneCapture sceneCapture;
 
   private volatile boolean running;
 
@@ -123,7 +124,6 @@ public class InfernoStatsPlugin extends Plugin {
 
     WaveSplit.UpdateTargetSplits(this.config);
 
-    eventBus.register(losCapture);
     eventBus.register(waveHandler);
     eventBus.register(timerHandler);
     eventBus.register(chatHandler);
@@ -137,8 +137,6 @@ public class InfernoStatsPlugin extends Plugin {
   @Override
   protected void shutDown() {
     running = false;
-    eventBus.unregister(losCapture);
-    clientThread.invokeLater(losCapture::clear);
     overlayManager.remove(overlay);
     clientToolbar.removeNavigation(navButton);
 
@@ -160,7 +158,7 @@ public class InfernoStatsPlugin extends Plugin {
     switch (event.getKey()) {
       case "url":
         clientThread.invokeLater(() -> {
-          if (running) panel.refreshLinks(losCapture.canCapture());
+          if (running) panel.refreshLinks(sceneCapture.canCapture());
         });
         break;
       case "hide":
@@ -183,7 +181,7 @@ public class InfernoStatsPlugin extends Plugin {
 
   @Subscribe
   public void onGameStateChanged(GameStateChanged gameStateChanged) {
-    if (panel != null) panel.updateCurrentLos(losCapture.canCapture());
+    if (panel != null) panel.updateCurrentLos(sceneCapture.canCapture());
     switch (gameStateChanged.getGameState()) {
       case LOADING:
         if (timerHandler.getState() == TimerHandler.TimerState.RUNNING)
@@ -203,7 +201,7 @@ public class InfernoStatsPlugin extends Plugin {
 
   @Subscribe
   protected void onGameTick(GameTick e) {
-    this.panel.updateCurrentLos(losCapture.canCapture());
+    this.panel.updateCurrentLos(sceneCapture.canCapture());
     if (isInInferno() || isInFightCaves())
       this.panel.UpdateWave();
   }
@@ -211,9 +209,10 @@ public class InfernoStatsPlugin extends Plugin {
   void openCurrentLos() {
     clientThread.invokeLater(() -> {
       if (!running || config.url() != InfernoStatsConfig.URL.INFERNO_TIPS) return;
-      String url = losCapture.currentUrl();
+      String url = sceneCapture.canCapture()
+          ? LosLinks.current(config.url(), sceneCapture.currentNpcs(), sceneCapture.player(), sceneCapture.pillars()) : null;
       panel.updateCurrentLos(url != null);
-      if (url != null) SwingUtilities.invokeLater(() -> LinkBrowser.browse(url));
+      if (url != null) SwingUtilities.invokeLater(() -> { if (running) LinkBrowser.browse(url); });
     });
   }
 

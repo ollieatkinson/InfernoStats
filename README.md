@@ -2,13 +2,12 @@
 
 A plugin to give you in-depth stats about your inferno attempt.
 
-The **Wave Tool** setting chooses the destination used by the existing wave links and the **Spawn LoS** buttons. Line of Sight remains the default, and Trainer remains available. Select **Inferno Tips** to use [los.inferno.tips](https://los.inferno.tips/):
+**Wave Tool** chooses where clicking an existing wave row opens its saved spawns. Line of Sight remains the default, and Trainer remains available. Select **Inferno Tips** to use [los.inferno.tips](https://los.inferno.tips/).
 
-- **Current LoS** captures your current player tile, living supported NPCs and standing pillars when clicked. It is available inside the Inferno and stays above the scrolling wave list.
-- **Spawn LoS** opens the recorded wave start, including the player tile and pillars at that time, NPC spawn tiles and NPC indices. Those captures remain available after leaving until a new run or plugin restart. A wave without a recorded start is disabled; it never opens a randomly generated wave.
+With Inferno Tips selected, **Current LoS** opens the player's current tile, living regular monsters and standing pillars when clicked. Clicking a wave row opens the recorded spawns using the existing wave capture flow, with player/pillar state recorded at wave start. Wave rows, timing statistics and the copy-splits action keep their existing layout.
 
-Inferno Tips receives compact `#IL2-…` share codes. The existing destinations retain their original URL format. Switching the setting updates the links for waves already in the sidebar. The existing Copy Wave Splits action still copies timing statistics.
+Both actions reuse the coordinate-array URL format (`mager=[[1,5]]`), with optional capture kind, wave, player, pillar and NPC-index metadata for Inferno Tips. The website generates compact IL2 codes when users share a position; the plugin needs no binary encoder or separate wave recorder. Other destinations retain their original URL format. Scene reads use the client thread; pillar scans happen on a wave start or explicit Current LoS click.
 
-Captures include nibblers, bloblets, Jad and Jad healers as well as the five regular monster types. Fight Caves is not supported by Inferno Tips capture. Zuk, his shield and Zuk healers are not simulated; supported adds are marked with a warning. Current captures describe positions, not observed attack cooldowns or dig timers. Capture is local and opening the browser is always a user action.
+This integration supports the existing five regular types: bats, blobs, meleers, rangers and magers. Nibblers, bloblets, Jad and Zuk are not exported; Inferno Tips shows that limitation. Saved Fight Caves and waves 67–69 cannot open in this destination. Current links omit a wave number rather than assume one after mid-wave entry. Attack cooldowns and dig timers are not captured.
 
-Capture and encoding code is adapted from [inferno-los-plugin](https://github.com/ollieatkinson/inferno-los-plugin); its MIT notice is in `licenses/inferno-los-MIT.txt` and included in the JAR. Mockito is used only by tests; no runtime dependency is added.
+The coordinate reader is adapted from [inferno-los-plugin](https://github.com/ollieatkinson/inferno-los-plugin). Its MIT notice is in `src/main/resources/META-INF/licenses/inferno-los-MIT.txt` and ships with the JAR. Mockito is test-only; no runtime dependency is added.

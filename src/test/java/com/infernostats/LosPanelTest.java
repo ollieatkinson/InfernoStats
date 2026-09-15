@@ -17,7 +17,7 @@ import static org.mockito.Mockito.*;
 
 public class LosPanelTest
 {
-    @Test public void currentActionStaysAboveScrollingSpawnsAndFollowsConfiguration() throws Exception
+    @Test public void currentActionFollowsConfigurationAndPreservesWaveRows() throws Exception
     {
         InfernoStatsPlugin plugin = mock(InfernoStatsPlugin.class);
         when(plugin.getWaves()).thenReturn(new ArrayList<>());
@@ -48,15 +48,18 @@ public class LosPanelTest
             assertTrue(panel.getCurrentLos().isEnabled());
             panel.getCurrentLos().doClick();
             verify(plugin).openCurrentLos();
-            panel.setSize(240, 650);
-            layout(panel);
+            panel.getWrappedPanel().setSize(240, 650);
+            layout(panel.getWrappedPanel());
+            layout(panel.getWrappedPanel());
+            assertTrue(panel.getCurrentLos().getHeight() >= 20);
             assertEquals(66, panel.getWaveListPanel().getComponentCount());
-            assertTrue(panel.getWaveListContainer().getVerticalScrollBar().isVisible());
+
             assertFalse(SwingUtilities.isDescendingFrom(panel.getCurrentLos(), panel.getWaveListContainer()));
-            assertTrue(panel.getWaveListContainer().getHeight() > 400);
+            assertFalse(java.util.Arrays.stream(((java.awt.Container)panel.getWaveListPanel().getComponent(0)).getComponents()).anyMatch(c -> c instanceof javax.swing.JButton));
+
             BufferedImage image = new BufferedImage(240, 650, BufferedImage.TYPE_INT_RGB);
             java.awt.Graphics2D graphics = image.createGraphics();
-            panel.printAll(graphics); graphics.dispose();
+            panel.getWrappedPanel().printAll(graphics); graphics.dispose();
             try {
                 Path output = Path.of("build", "fixtures", "los-panel.png");
                 Files.createDirectories(output.getParent()); ImageIO.write(image, "png", output.toFile());

@@ -1,6 +1,9 @@
-// Adapted from ollieatkinson/inferno-los-plugin; MIT license in licenses/inferno-los-MIT.txt.
+// Adapted from ollieatkinson/inferno-los-plugin; MIT license in src/main/resources/META-INF/licenses/inferno-los-MIT.txt.
 package com.infernostats.los;
 
+import com.infernostats.model.InfernoNpc;
+import com.infernostats.model.WaveNpc;
+import net.runelite.api.GameState;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -14,18 +17,18 @@ import net.runelite.api.WorldView;
 import net.runelite.api.coords.LocalPoint;
 import net.runelite.api.coords.WorldPoint;
 
-final class SceneCapture
+public final class SceneCapture
 {
     static final int REGION = 9043;
     static final int[][] PILLARS = {{0, 9}, {17, 7}, {10, 23}};
     private final Client client;
     @Inject SceneCapture(Client client) { this.client = client; }
 
-    boolean inInferno()
+    public boolean canCapture()
     {
-        if (client.getLocalPlayer() == null) return false;
+        if (client.getGameState() != GameState.LOGGED_IN || client.getLocalPlayer() == null) return false;
         LocalPoint local = LocalPoint.fromWorld(client.getLocalPlayer().getWorldView(), client.getLocalPlayer().getWorldLocation());
-        return local != null && WorldPoint.fromLocalInstance(client, local).getRegionID() == REGION;
+        return local != null && fits(grid(WorldPoint.fromLocalInstance(client, local)), 1);
     }
     static int[] grid(WorldPoint point)
     {
@@ -36,10 +39,11 @@ final class SceneCapture
     {
         return p != null && p[0] >= 0 && p[0] + size <= 29 && p[1] < 30 && p[1] - size + 1 >= 0;
     }
-    int[] player()
+    public Point player()
     {
-        if (!inInferno()) return null;
-        return grid(WorldPoint.fromLocalInstance(client, LocalPoint.fromWorld(client.getLocalPlayer().getWorldView(), client.getLocalPlayer().getWorldLocation())));
+        if (!canCapture()) return null;
+        int[] tile = grid(WorldPoint.fromLocalInstance(client, LocalPoint.fromWorld(client.getLocalPlayer().getWorldView(), client.getLocalPlayer().getWorldLocation())));
+        return new Point(tile[0], tile[1]);
     }
     private int[] footprint(WorldView view, LocalPoint southwest, int size)
     {
@@ -54,17 +58,16 @@ final class SceneCapture
         }
         return new int[]{minX, maxY};
     }
-    Snapshot.Mob mob(NPC npc)
+    public WorldPoint spawn(NPC npc)
     {
-        NpcKind type = NpcKind.fromId(npc.getId());
+        InfernoNpc type = InfernoNpc.fromName(npc.getName()).orElse(null);
         if (type == null || npc.isDead()) return null;
         int[] p = footprint(npc.getWorldView(), LocalPoint.fromWorld(npc.getWorldView(), npc.getWorldLocation()), type.size);
-        if (!fits(p, type.size)) return null;
-        return new Snapshot.Mob(npc.getIndex(), type, p[0], p[1]);
+        return fits(p, type.size) ? WorldPoint.fromRegion(REGION, p[0] + 17, 46 - p[1], 0) : null;
     }
-    boolean[] pillars()
+    public int pillars()
     {
-        boolean[] present = new boolean[3];
+        int present = 0;
         WorldView view = client.getTopLevelWorldView();
         if (view == null || view.getScene() == null) return present;
         Tile[][] tiles = view.getScene().getTiles()[view.getPlane()];
@@ -76,23 +79,20 @@ final class SceneCapture
                 if (object == null || object.getId() < 30353 || object.getId() > 30355) continue;
                 Point min = object.getSceneMinLocation();
                 int[] p = footprint(view, LocalPoint.fromScene(min.getX(), min.getY(), view), 3);
-                for (int i = 0; i < PILLARS.length; i++) if (Arrays.equals(p, PILLARS[i])) present[i] = true;
+                for (int i = 0; i < PILLARS.length; i++) if (Arrays.equals(p, PILLARS[i])) present |= 1 << i;
             }
         }
         return present;
     }
-    Snapshot current(Integer wave, List<String> warnings)
+    public List<WaveNpc> currentNpcs()
     {
-        int[] player = player();
-        if (!fits(player, 1)) throw new IllegalStateException("Enter the Inferno arena to capture current positions.");
-        List<Snapshot.Mob> mobs = new ArrayList<>();
-        List<String> notes = new ArrayList<>(warnings);
+        List<WaveNpc> npcs = new ArrayList<>();
+        if (!canCapture()) return npcs;
         for (NPC npc : client.getTopLevelWorldView().npcs())
         {
-            Snapshot.Mob mob = mob(npc);
-            if (mob != null) mobs.add(mob);
-            else if (NpcKind.fromId(npc.getId()) != null && !npc.isDead()) notes.add("An NPC outside the supported arena was omitted: " + npc.getId());
+            WorldPoint point = spawn(npc);
+            if (point != null) npcs.add(new WaveNpc(InfernoNpc.fromName(npc.getName()).get(), point, npc.getIndex()));
         }
-        return new Snapshot("current", wave, player, pillars(), mobs, notes);
+        return npcs;
     }
 }

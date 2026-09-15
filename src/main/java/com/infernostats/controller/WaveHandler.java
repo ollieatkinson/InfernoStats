@@ -5,6 +5,7 @@ import com.infernostats.InfernoStatsPlugin;
 import com.infernostats.events.WaveFinishedEvent;
 import com.infernostats.events.WaveStartedEvent;
 import com.infernostats.model.Location;
+import com.infernostats.los.SceneCapture;
 import com.infernostats.model.Wave;
 import com.infernostats.model.WaveState;
 import com.infernostats.view.TimeFormatting;
@@ -49,6 +50,9 @@ public class WaveHandler {
 
   @Inject
   private Client client;
+
+  @Inject
+  private SceneCapture sceneCapture;
 
   @Inject
   private EventBus eventBus;
@@ -101,6 +105,10 @@ public class WaveHandler {
       setLocation(Location.FIGHT_CAVES);
 
     this.wave = e.getWave();
+    if (sceneCapture.canCapture()) {
+      wave.setLosPlayer(sceneCapture.player());
+      wave.setLosPillars(sceneCapture.pillars());
+    }
     if (this.wave.getId() == 1)
       waves.clear();
     this.waves.add(this.wave);
@@ -139,7 +147,8 @@ public class WaveHandler {
       return;
     }
 
-    wave.addNpc(npc, npc.getWorldLocation());
+    WorldPoint spawn = sceneCapture.spawn(npc);
+    if (spawn != null) wave.addNpc(npc, spawn);
   }
 
   @Subscribe
